@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meridian — World Clock, Focus Timer & Meeting Finder</title>
+<meta name="description" content="Meridian is a free time toolkit: live world clocks by country and city, a customizable focus timer with session history, a meeting-time overlap finder, and alarms — all saved to your browser.">
+<meta property="og:title" content="Meridian — Time Tools for Real Life">
+<meta property="og:description" content="Live world clocks, a customizable focus timer, a meeting-time overlap finder, and alarms — free for everyone.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#1c1e22">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%231c1e22' stroke='%23b08d57' stroke-width='4'/%3E%3Cline x1='50' y1='50' x2='50' y2='24' stroke='%23f6f4ef' stroke-width='5' stroke-linecap='round'/%3E%3Cline x1='50' y1='50' x2='68' y2='58' stroke='%23d33b2c' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='50' cy='50' r='4' fill='%23d33b2c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+  :root{
+    --ink:#1c1e22; --ink-2:#26292f; --ink-3:#31353c;
+    --porcelain:#f6f4ef; --slate:#8b93a1;
+    --brass:#b08d57; --signal:#d33b2c;
+    --accent: var(--brass);
+    --good:#5b8c7a;
+    --radius-lg:28px; --radius-md:18px; --radius-sm:10px;
+    --shadow-card: 0 20px 60px -20px rgba(0,0,0,.6);
+    --ease: cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{font-family:'Inter', sans-serif; background:var(--ink); color:var(--porcelain); min-height:100vh; overflow-x:hidden; position:relative;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important;} }
+  a{color:inherit; text-decoration:none;}
+  button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit;}
+  ul{list-style:none;}
+  select, input{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:4px;}
+
+  .ambient-dial{ position:fixed; top:50%; left:50%; width:1400px; height:1400px; transform:translate(-50%,-50%); border-radius:50%; border:1px solid rgba(176,141,87,.08); pointer-events:none; z-index:0; }
+  .ambient-dial::before{ content:""; position:absolute; inset:60px; border-radius:50%; border:1px dashed rgba(176,141,87,.06); }
+  .ambient-sweep{ position:fixed; top:50%; left:50%; width:700px; height:2px; background:linear-gradient(90deg, rgba(211,59,44,.35), transparent 70%); transform-origin:0 50%; transform:translate(0,-50%) rotate(0deg); animation:sweep 60s linear infinite; pointer-events:none; z-index:0; }
+  /* Removed from view everywhere — as a fixed full-page element it could never be
+     reliably contained to "under the clock only", so it's hidden site-wide.
+     The clock card keeps its own contained glow via .clock-card::after below. */
+  .ambient-dial, .ambient-sweep{ display:none; }
+  @keyframes sweep{ to{ transform:translate(0,-50%) rotate(360deg); } }
+
+  .topnav{ position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; padding:20px 5vw; background:linear-gradient(180deg, rgba(28,30,34,.94), rgba(28,30,34,.8)); backdrop-filter:blur(14px); border-bottom:1px solid rgba(255,255,255,.06); }
+  .brand{ font-family:'Instrument Serif', serif; font-size:1.5rem; letter-spacing:.5px; display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--signal); box-shadow:0 0 10px var(--signal); }
+  .navlinks{ display:flex; gap:2px; align-items:center; }
+  .navlinks a{ font-size:.78rem; font-weight:600; letter-spacing:.02em; color:var(--slate); padding:9px 13px; border-radius:999px; transition:color .25s var(--ease), background .25s var(--ease); white-space:nowrap; }
+  .navlinks a:hover{ color:var(--porcelain); background:rgba(255,255,255,.05); }
+  .navlinks a.active{ color:var(--ink); background:var(--accent); }
+  .navtoggle{ display:none; font-size:1.3rem; }
+  @media (max-width:900px){
+    .navlinks{ position:fixed; top:68px; right:5vw; left:5vw; flex-direction:column; align-items:stretch; background:var(--ink-2); border-radius:var(--radius-md); padding:10px; border:1px solid rgba(255,255,255,.08); display:none; gap:4px; }
+    .navlinks.open{ display:flex; }
+    .navlinks a{ text-align:center; padding:12px; }
+    .navtoggle{ display:block; }
+  }
+
+  main{ position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:0 5vw 100px; }
+  .page{ display:none; animation:fadein .5s var(--ease); }
+  .page.active{ display:block; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+
+  .page-head{ text-align:center; padding:52px 0 8px; }
+  .page-head .eyebrow{ font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; color:var(--brass); font-weight:700; margin-bottom:14px; }
+  .page-head h1, .page-head h2{ font-family:'Instrument Serif', serif; font-style:italic; font-size:clamp(2.2rem,6vw,3.4rem); line-height:1.05; }
+  .page-head p{ max-width:540px; margin:16px auto 0; color:var(--slate); font-size:1rem; line-height:1.6; }
+
+  /* ===== STUDIO ===== */
+  .tabs{ display:flex; justify-content:center; gap:8px; margin:38px 0 32px; flex-wrap:wrap; }
+  .tab-btn{ padding:10px 22px; border-radius:999px; border:1px solid rgba(255,255,255,.1); color:var(--slate); font-size:.85rem; font-weight:600; transition:all .25s var(--ease); }
+  .tab-btn:hover{ color:var(--porcelain); border-color:rgba(255,255,255,.25); }
+  .tab-btn.active{ background:var(--accent); color:var(--ink); border-color:var(--accent); }
+  .preset-btn{ padding:10px 20px; border-radius:999px; border:1px solid rgba(255,255,255,.1); color:var(--slate); font-size:.8rem; font-weight:600; transition:all .25s var(--ease); }
+  .preset-btn:hover{ color:var(--porcelain); border-color:rgba(255,255,255,.25); }
+  .preset-btn.active{ background:var(--accent); color:var(--ink); border-color:var(--accent); }
+  .stage{ display:flex; justify-content:center; margin-bottom:36px; }
+  .clock-card{ display:none; background:linear-gradient(160deg, var(--ink-3), var(--ink-2)); border:1px solid rgba(255,255,255,.08); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); padding:48px 56px; position:relative; overflow:hidden; }
+  .clock-card.active{ display:block; animation:fadein .4s var(--ease); }
+  .clock-card::after{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 30% 20%, rgba(176,141,87,.08), transparent 60%); pointer-events:none; }
+
+  .hybrid-wrap{ display:flex; align-items:center; gap:44px; flex-wrap:wrap; justify-content:center; }
+  .analog{ width:210px; height:210px; border-radius:50%; background:radial-gradient(circle at 35% 30%, var(--ink-2), var(--ink)); border:1px solid rgba(255,255,255,.08); position:relative; flex-shrink:0; }
+  .hand{ position:absolute; left:50%; bottom:50%; transform-origin:50% 100%; border-radius:4px; }
+  .hand.hour{ width:5px; height:52px; background:var(--porcelain); margin-left:-2.5px; }
+  .hand.min{ width:3px; height:78px; background:var(--porcelain); margin-left:-1.5px; }
+  .hand.sec{ width:1.5px; height:88px; background:var(--signal); margin-left:-.75px; }
+  .hub{ position:absolute; top:50%; left:50%; width:10px; height:10px; background:var(--signal); border-radius:50%; transform:translate(-50%,-50%); z-index:2;}
+  .hybrid-readout{ text-align:left; }
+  .hybrid-readout .digits{ font-family:'Inter'; font-weight:700; font-size:3rem; line-height:1; letter-spacing:-.02em; }
+  .hybrid-readout .digits small{ font-size:1.5rem; font-weight:600; color:var(--slate); }
+  .hybrid-readout .weekday{ margin-top:10px; display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.12em; color:var(--signal); border:1px solid rgba(211,59,44,.4); padding:4px 10px; border-radius:999px; }
+
+  .digital-wrap{ text-align:center; }
+  .seven-seg-row{ display:flex; align-items:flex-end; justify-content:center; gap:6px; }
+  .digit{ position:relative; width:36px; height:62px; margin:0 1px; }
+  .seg{ position:absolute; background:var(--ink-3); transition:background .15s; }
+  .seg.on{ background:var(--accent); box-shadow:0 0 10px var(--accent); }
+  .seg-a{ top:0; left:5px; width:26px; height:6px; clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%); }
+  .seg-g{ top:28px; left:5px; width:26px; height:6px; clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%); }
+  .seg-d{ bottom:0; left:5px; width:26px; height:6px; clip-path:polygon(10% 0,90% 0,100% 50%,90% 100%,10% 100%,0 50%); }
+  .seg-f{ top:3px; left:0; width:6px; height:25px; clip-path:polygon(0 10%,50% 0,100% 10%,100% 90%,50% 100%,0 90%); }
+  .seg-b{ top:3px; right:0; width:6px; height:25px; clip-path:polygon(0 10%,50% 0,100% 10%,100% 90%,50% 100%,0 90%); }
+  .seg-e{ bottom:3px; left:0; width:6px; height:25px; clip-path:polygon(0 10%,50% 0,100% 10%,100% 90%,50% 100%,0 90%); }
+  .seg-c{ bottom:3px; right:0; width:6px; height:25px; clip-path:polygon(0 10%,50% 0,100% 10%,100% 90%,50% 100%,0 90%); }
+  .colon{ font-size:2.4rem; font-weight:700; color:var(--accent); align-self:center; margin:0 2px; }
+  .digital-date{ margin-top:22px; display:inline-flex; align-items:center; gap:10px; font-family:'JetBrains Mono', monospace; font-size:.8rem; color:var(--slate); }
+  .digital-date .pill{ background:var(--accent); color:var(--ink); font-weight:700; padding:4px 10px; border-radius:999px; font-size:.65rem; letter-spacing:.08em; }
+
+  .roman-wrap{ display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .roman-face{ width:250px; height:250px; border-radius:50%; background:var(--porcelain); position:relative; box-shadow: inset 0 2px 10px rgba(0,0,0,.15), 0 20px 40px rgba(0,0,0,.4); }
+  .rn{ position:absolute; font-family:'Instrument Serif', serif; font-size:1.25rem; color:var(--ink); transform:translate(-50%,-50%); }
+  .roman-face .hand.hour{ background:var(--ink); }
+  .roman-face .hand.min{ background:var(--ink); }
+  .roman-face .hub{ background:var(--signal); }
+  .roman-label{ font-size:.75rem; letter-spacing:.15em; text-transform:uppercase; color:var(--slate); }
+
+  .customizer{ max-width:640px; margin:0 auto 20px; background:var(--ink-2); border:1px solid rgba(255,255,255,.07); border-radius:var(--radius-md); padding:26px 28px; display:flex; flex-wrap:wrap; gap:26px; justify-content:space-between; align-items:center; }
+  .customizer h3{ font-size:.78rem; letter-spacing:.1em; text-transform:uppercase; color:var(--slate); margin-bottom:12px; font-weight:600;}
+  .swatches{ display:flex; gap:10px; }
+  .swatch{ width:26px; height:26px; border-radius:50%; border:2px solid transparent; transition:transform .2s, border-color .2s;}
+  .swatch:hover{ transform:scale(1.1); }
+  .swatch.active{ border-color:var(--porcelain); }
+  .fmt-toggle{ display:flex; background:var(--ink-3); border-radius:999px; padding:3px; }
+  .fmt-btn{ padding:8px 16px; border-radius:999px; font-size:.8rem; font-weight:600; color:var(--slate); }
+  .fmt-btn.active{ background:var(--accent); color:var(--ink); }
+
+  /* ===== SHARED CARD/GRID ===== */
+  .tool-card{ background:var(--ink-2); border:1px solid rgba(255,255,255,.07); border-radius:var(--radius-md); padding:26px; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:720px){ .grid-2{ grid-template-columns:1fr; } }
+
+  /* ===== WORLD CLOCK ===== */
+  .add-city-row{ max-width:560px; margin:30px auto 34px; display:flex; gap:10px; }
+  .add-city-row select{ flex:1; background:var(--ink-2); border:1px solid rgba(255,255,255,.1); color:var(--porcelain); padding:12px 14px; border-radius:var(--radius-sm); font-size:.85rem; }
+  .btn-primary{ background:var(--accent); color:var(--ink); font-weight:700; padding:12px 22px; border-radius:var(--radius-sm); font-size:.85rem; transition:filter .2s; white-space:nowrap; }
+  .btn-primary:hover{ filter:brightness(1.1); }
+  .world-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; max-width:960px; margin:0 auto; }
+  .city-card{ background:var(--ink-2); border:1px solid rgba(255,255,255,.07); border-radius:var(--radius-md); padding:22px; position:relative; }
+  .city-card .remove{ position:absolute; top:14px; right:14px; color:var(--slate); font-size:.85rem; }
+  .city-card .remove:hover{ color:var(--signal); }
+  .city-card .city-name{ font-weight:700; font-size:1rem; display:flex; align-items:center; gap:8px; }
+  .city-card .city-time{ font-family:'JetBrains Mono', monospace; font-size:2rem; font-weight:700; margin-top:10px; }
+  .city-card .city-meta{ font-size:.75rem; color:var(--slate); margin-top:6px; }
+  .city-card .badge-off{ display:inline-block; margin-top:10px; font-size:.68rem; padding:3px 9px; border-radius:999px; background:var(--ink-3); color:var(--slate); }
+  .empty-state{ text-align:center; color:var(--slate); padding:40px 0; font-size:.9rem; grid-column:1/-1; }
+
+  /* ===== FOCUS TIMER ===== */
+  .focus-wrap{ display:flex; justify-content:center; gap:40px; flex-wrap:wrap; margin:30px 0 44px; }
+  .timer-ring{ position:relative; width:240px; height:240px; }
+  .timer-ring svg{ transform:rotate(-90deg); }
+  .timer-ring circle{ fill:none; stroke-width:8; }
+  .ring-bg{ stroke:var(--ink-3); }
+  .ring-fg{ stroke:var(--accent); stroke-linecap:round; transition:stroke-dashoffset 1s linear; }
+  .timer-center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .timer-time{ font-family:'JetBrains Mono', monospace; font-size:2.4rem; font-weight:700; }
+  .timer-mode{ font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--slate); margin-top:6px; }
+  .timer-controls{ display:flex; flex-direction:column; justify-content:center; gap:12px; min-width:200px; }
+  .timer-mode-toggle{ display:flex; background:var(--ink-3); border-radius:999px; padding:3px; }
+  .timer-btns{ display:flex; gap:10px; }
+  .btn-ghost{ border:1px solid rgba(255,255,255,.2); padding:11px 20px; border-radius:999px; font-weight:600; font-size:.82rem; }
+  .btn-ghost:hover{ border-color:var(--porcelain); }
+  .session-count{ font-size:.78rem; color:var(--slate); }
+
+  .duration-form{ max-width:640px; margin:8px auto 0; background:var(--ink-2); border:1px solid rgba(255,255,255,.07); border-radius:var(--radius-md); padding:20px 22px; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; justify-content:center; }
+  .duration-form .field{ min-width:auto; flex:none; }
+  .duration-form .field label{ text-align:center; }
+  .duration-inputs{ display:flex; gap:16px; align-items:center; }
+  .dur-pair{ display:flex; align-items:center; gap:6px; }
+  .duration-inputs input{ width:56px; background:var(--ink-3); border:1px solid rgba(255,255,255,.08); color:var(--porcelain); padding:9px 8px; border-radius:var(--radius-sm); font-size:.85rem; text-align:center; font-family:'JetBrains Mono', monospace; }
+  .duration-inputs input::-webkit-inner-spin-button{ opacity:1; }
+  .duration-unit{ font-size:.72rem; color:var(--slate); }
+  .duration-note{ text-align:center; font-size:.72rem; color:var(--slate); margin-top:10px; max-width:640px; margin-left:auto; margin-right:auto;}
+
+  /* ===== INTERVALS ===== */
+  .round-label{ font-size:.68rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin-top:4px; font-weight:700; }
+  .interval-form{ max-width:680px; margin:8px auto 0; background:var(--ink-2); border:1px solid rgba(255,255,255,.07); border-radius:var(--radius-md); padding:20px 22px; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; justify-content:center; }
+  .rounds-field input{ width:56px; background:var(--ink-3); border:1px solid rgba(255,255,255,.08); color:var(--porcelain); padding:9px 8px; border-radius:var(--radius-sm); font-size:.85rem; text-align:center; font-family:'JetBrains Mono', monospace; }
+  .endless-check{ display:flex; align-items:center; gap:8px; font-size:.78rem; color:var(--slate); padding-bottom:9px; }
+  .endless-check input{ width:16px; height:16px; accent-color:var(--accent); }
+  .phase-tag{ display:inline-block; margin-top:8px; font-size:.7rem; font-weight:700; letter-spacing:.1em; padding:4px 12px; border-radius:999px; }
+  .phase-tag.work{ background:rgba(211,59,44,.2); color:var(--signal); }
+  .phase-tag.rest{ background:rgba(91,140,122,.25); color:var(--good); }
+  .complete-banner{ text-align:center; color:var(--good); font-size:.9rem; margin-top:12px; display:none; }
+  .complete-banner.show{ display:block; }
+
+  .history-list{ max-width:560px; margin:0 auto; display:flex; flex-direction:column; gap:8px; }
+  .history-item{ display:flex; justify-content:space-between; background:var(--ink-2); border:1px solid rgba(255,255,255,.06); border-radius:var(--radius-sm); padding:12px 16px; font-size:.85rem; }
+  .history-item .mins{ color:var(--accent); font-weight:700; font-family:'JetBrains Mono', monospace; }
+
+  /* ===== ALARMS ===== */
+  .alarm-form{ max-width:520px; margin:30px auto; background:var(--ink-2); border:1px solid rgba(255,255,255,.07); border-radius:var(--radius-md); padding:24px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .field{ flex:1; min-width:140px; }
+  .field label{ display:block; font-size:.72rem; color:var(--slate); margin-bottom:6px; letter-spacing:.05em; text-transform:uppercase;}
+  .field input{ width:100%; background:var(--ink-3); border:1px solid rgba(255,255,255,.08); color:var(--porcelain); padding:11px 12px; border-radius:var(--radius-sm); font-size:.9rem; }
+  .alarm-list{ max-width:520px; margin:0 auto 50px; display:flex; flex-direction:column; gap:12px; }
+  .alarm-item{ display:flex; align-items:center; justify-content:space-between; gap:14px; background:var(--ink-2); border:1px solid rgba(255,255,255,.06); border-radius:var(--radius-sm); padding:16px 18px; }
+  .alarm-item .time{ font-family:'JetBrains Mono', monospace; font-size:1.4rem; font-weight:700; }
+  .alarm-item .label{ font-size:.78rem; color:var(--slate); margin-top:2px; }
+  .alarm-actions{ display:flex; align-items:center; gap:14px; }
+  .switch{ position:relative; width:42px; height:24px; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .slider-el{ position:absolute; inset:0; background:var(--ink-3); border-radius:999px; cursor:pointer; transition:.2s; }
+  .slider-el::before{ content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:var(--slate); border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider-el{ background:var(--accent); }
+  .switch input:checked + .slider-el::before{ transform:translateX(18px); background:var(--ink); }
+  .del-btn{ color:var(--slate); font-size:1rem; }
+  .del-btn:hover{ color:var(--signal); }
+
+  .ring-overlay{ position:fixed; inset:0; background:rgba(28,30,34,.94); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:200; flex-direction:column; gap:20px; }
+  .ring-overlay.show{ display:flex; }
+  .ring-overlay i{ font-size:3rem; color:var(--signal); animation:ring 1s infinite; }
+  @keyframes ring{ 0%,100%{ transform:rotate(-8deg); } 50%{ transform:rotate(8deg); } }
+  .ring-overlay h3{ font-family:'Instrument Serif', serif; font-size:2rem; font-style:italic; }
+  .ring-overlay .time-big{ font-family:'JetBrains Mono', monospace; font-size:2.6rem; }
+  .ring-actions{ display:flex; gap:14px; margin-top:10px; }
+
+  /* ===== MEETING FINDER ===== */
+  .meeting-form{ max-width:640px; margin:30px auto 10px; display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; justify-content:center; }
+  .meeting-form select{ background:var(--ink-2); border:1px solid rgba(255,255,255,.1); color:var(--porcelain); padding:12px 14px; border-radius:var(--radius-sm); font-size:.85rem; min-width:170px; }
+  .meeting-result{ max-width:800px; margin:34px auto 0; }
+  .zone-row{ display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  .zone-label{ width:140px; font-size:.82rem; font-weight:600; flex-shrink:0; }
+  .hour-grid{ display:grid; grid-template-columns:repeat(24,1fr); gap:3px; flex:1; }
+  .hour-block{ height:26px; border-radius:4px; background:var(--ink-3); position:relative; }
+  .hour-block.work{ background:rgba(176,141,87,.35); }
+  .hour-block.overlap{ background:var(--good); }
+  .hour-block:hover::after{
+    content:attr(data-tip); position:absolute; bottom:120%; left:50%; transform:translateX(-50%);
+    background:var(--ink); border:1px solid rgba(255,255,255,.15); padding:4px 8px; border-radius:6px;
+    font-size:.68rem; white-space:nowrap; z-index:5;
+  }
+  .legend{ display:flex; gap:18px; justify-content:center; margin-top:16px; font-size:.75rem; color:var(--slate); flex-wrap:wrap; }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .legend i{ width:12px; height:12px; border-radius:3px; display:inline-block; }
+  .best-overlap{ text-align:center; margin-top:22px; font-size:.9rem; color:var(--porcelain); }
+  .best-overlap b{ color:var(--good); }
+
+  /* ===== ABOUT ===== */
+  .about-wrap{ max-width:640px; margin:30px auto; }
+  .about-wrap p{ color:var(--slate); line-height:1.8; margin-bottom:18px; font-size:1rem; }
+  .about-wrap h4{ font-family:'Instrument Serif', serif; font-style:italic; font-size:1.4rem; margin:26px 0 10px; }
+  .stack-list{ display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .stack-chip{ font-size:.75rem; padding:7px 14px; border-radius:999px; background:var(--ink-2); border:1px solid rgba(255,255,255,.08); color:var(--slate); }
+
+  @media (max-width:640px){
+    .clock-card{ padding:34px 20px; }
+    .hybrid-wrap{ flex-direction:column; }
+    .customizer{ flex-direction:column; align-items:stretch; }
+    .zone-label{ width:90px; font-size:.72rem; }
+    .hour-block:hover::after{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="ambient-dial" aria-hidden="true"></div>
+<div class="ambient-sweep" aria-hidden="true"></div>
+
+<nav class="topnav">
+  <div class="brand"><span class="dot"></span> Meridian</div>
+  <button class="navtoggle" id="navToggle" aria-label="Toggle menu"><i class="fa-solid fa-bars"></i></button>
+  <ul class="navlinks" id="navLinks" role="navigation">
+    <li><a href="#/home" data-route="home">Studio</a></li>
+    <li><a href="#/world" data-route="world">World Clock</a></li>
+    <li><a href="#/focus" data-route="focus">Focus</a></li>
+    <li><a href="#/intervals" data-route="intervals">Intervals</a></li>
+    <li><a href="#/meeting" data-route="meeting">Meeting</a></li>
+    <li><a href="#/alarms" data-route="alarms">Alarms</a></li>
+    <li><a href="#/about" data-route="about">About</a></li>
+  </ul>
+</nav>
+
+<main>
+
+  <!-- ================= STUDIO ================= -->
+  <section class="page" id="page-home">
+    <div class="page-head">
+      <div class="eyebrow">Precision Clock Studio</div>
+      <h1>Time, rendered<br>with intent.</h1>
+      <p>Three instrument-grade clock faces, one live studio. Switch styles, tune the accent, and read time the way it deserves to be read.</p>
+      <p style="margin-top:10px; font-size:.85rem; color:var(--brass); letter-spacing:.02em;">Also inside: world clock · focus timer · interval trainer · meeting finder · alarms</p>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" data-style="hybrid">Hybrid</button>
+      <button class="tab-btn" data-style="digital">Digital</button>
+      <button class="tab-btn" data-style="roman">Roman</button>
+    </div>
+
+    <div class="stage">
+      <div class="clock-card active" id="card-hybrid">
+        <div class="hybrid-wrap">
+          <div class="analog" id="hybridAnalog">
+            <div class="hand hour" id="hybridHour"></div>
+            <div class="hand min" id="hybridMin"></div>
+            <div class="hand sec" id="hybridSec"></div>
+            <div class="hub"></div>
+          </div>
+          <div class="hybrid-readout">
+            <div class="digits" id="hybridDigits">08<small>:54</small></div>
+            <div class="weekday" id="hybridDay">WEDNESDAY</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="clock-card" id="card-digital">
+        <div class="digital-wrap">
+          <div class="seven-seg-row" id="digitalRow"></div>
+          <div class="digital-date">
+            <span id="digitalDate">30, AUG</span>
+            <span class="pill" id="digitalPill">WED</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="clock-card" id="card-roman">
+        <div class="roman-wrap">
+          <div class="roman-face" id="romanFace">
+            <div class="hand hour" id="romanHour"></div>
+            <div class="hand min" id="romanMin"></div>
+            <div class="hand sec" id="romanSec"></div>
+            <div class="hub"></div>
+          </div>
+          <div class="roman-label" id="romanLabel">Wednesday · 30 Aug</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="customizer">
+      <div>
+        <h3>Accent</h3>
+        <div class="swatches" id="swatches">
+          <button class="swatch active" style="background:#b08d57" data-color="#b08d57" aria-label="Brass accent"></button>
+          <button class="swatch" style="background:#d33b2c" data-color="#d33b2c" aria-label="Signal red accent"></button>
+          <button class="swatch" style="background:#5b8c7a" data-color="#5b8c7a" aria-label="Verdigris accent"></button>
+          <button class="swatch" style="background:#6b7fd7" data-color="#6b7fd7" aria-label="Indigo accent"></button>
+        </div>
+      </div>
+      <div>
+        <h3>Format</h3>
+        <div class="fmt-toggle">
+          <button class="fmt-btn active" data-fmt="24">24h</button>
+          <button class="fmt-btn" data-fmt="12">12h</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WORLD CLOCK ================= -->
+  <section class="page" id="page-world">
+    <div class="page-head">
+      <div class="eyebrow">Real Problem: Timezones</div>
+      <h2>What time is it, everywhere?</h2>
+      <p>Add the cities you actually work with — clients, teams, family — and see them update live, side by side.</p>
+    </div>
+
+    <div class="add-city-row">
+      <select id="countrySelect" aria-label="Country"></select>
+      <select id="citySelect" aria-label="City"></select>
+      <button class="btn-primary" id="addCityBtn"><i class="fa-solid fa-plus"></i> Add city</button>
+    </div>
+
+    <div class="world-grid" id="worldGrid"></div>
+  </section>
+
+  <!-- ================= FOCUS ================= -->
+  <section class="page" id="page-focus">
+    <div class="page-head">
+      <div class="eyebrow">Real Problem: Staying Focused</div>
+      <h2>One session at a time.</h2>
+      <p>A pomodoro timer that remembers your sessions, so focus becomes a habit you can actually see.</p>
+    </div>
+
+    <div class="focus-wrap">
+      <div class="timer-ring">
+        <svg width="240" height="240">
+          <circle class="ring-bg" cx="120" cy="120" r="106"></circle>
+          <circle class="ring-fg" id="ringFg" cx="120" cy="120" r="106" stroke-dasharray="666" stroke-dashoffset="0"></circle>
+        </svg>
+        <div class="timer-center">
+          <div class="timer-time" id="timerDisplay">25:00</div>
+          <div class="timer-mode" id="timerModeLabel">Focus</div>
+        </div>
+      </div>
+      <div class="timer-controls">
+        <div class="timer-mode-toggle">
+          <button class="fmt-btn active" data-mode="focus" id="modeFocusBtn">Focus 25</button>
+          <button class="fmt-btn" data-mode="break" id="modeBreakBtn">Break 5</button>
+        </div>
+        <div class="timer-btns">
+          <button class="btn-primary" id="startPauseBtn"><i class="fa-solid fa-play"></i> Start</button>
+          <button class="btn-ghost" id="resetBtn">Reset</button>
+        </div>
+        <div class="session-count" id="sessionCount">0 focus sessions logged</div>
+      </div>
+    </div>
+
+    <div class="duration-form">
+      <div class="field">
+        <label for="focusMinInput">Focus length</label>
+        <div class="duration-inputs">
+          <span class="dur-pair"><input type="number" id="focusMinInput" min="0" max="180" value="25" aria-label="Focus minutes"><span class="duration-unit">min</span></span>
+          <span class="dur-pair"><input type="number" id="focusSecInput" min="0" max="59" value="0" aria-label="Focus seconds"><span class="duration-unit">sec</span></span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="breakMinInput">Break length</label>
+        <div class="duration-inputs">
+          <span class="dur-pair"><input type="number" id="breakMinInput" min="0" max="60" value="5" aria-label="Break minutes"><span class="duration-unit">min</span></span>
+          <span class="dur-pair"><input type="number" id="breakSecInput" min="0" max="59" value="0" aria-label="Break seconds"><span class="duration-unit">sec</span></span>
+        </div>
+      </div>
+      <button class="btn-primary" id="applyDurationBtn"><i class="fa-solid fa-check"></i> Apply</button>
+    </div>
+    <p class="duration-note">Set any length you like — applying resets the current timer to the new duration.</p>
+
+    <div class="page-head" style="padding-top:10px;">
+      <h4 style="font-family:'Instrument Serif',serif; font-style:italic; font-size:1.4rem;">Session history</h4>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </section>
+
+  <!-- ================= INTERVALS ================= -->
+  <section class="page" id="page-intervals">
+    <div class="page-head">
+      <div class="eyebrow">Real Problem: Exercise & Circuit Timing</div>
+      <h2>Set it once, repeat itself.</h2>
+      <p>Work / rest rounds that cycle automatically — great for workouts, drills, or any repeated task. No manual restarting between reps.</p>
+    </div>
+
+    <div class="focus-wrap">
+      <div class="timer-ring">
+        <svg width="240" height="240">
+          <circle class="ring-bg" cx="120" cy="120" r="106"></circle>
+          <circle class="ring-fg" id="intervalRingFg" cx="120" cy="120" r="106" stroke-dasharray="666" stroke-dashoffset="0"></circle>
+        </svg>
+        <div class="timer-center">
+          <div class="timer-time" id="intervalDisplay">00:45</div>
+          <span class="phase-tag work" id="intervalPhaseTag">WORK</span>
+          <div class="round-label" id="intervalRoundLabel">Round 1 of 8</div>
+        </div>
+      </div>
+      <div class="timer-controls">
+        <div class="timer-btns">
+          <button class="btn-primary" id="intervalStartPauseBtn"><i class="fa-solid fa-play"></i> Start</button>
+          <button class="btn-ghost" id="intervalResetBtn">Reset</button>
+        </div>
+        <div class="session-count" id="intervalStatus">Ready to start.</div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist" style="margin-top:0;">
+      <button class="preset-btn" data-work="20" data-rest="10" data-rounds="8">Tabata · 20/10 ×8</button>
+      <button class="preset-btn" data-work="45" data-rest="15" data-rounds="10">HIIT · 45/15 ×10</button>
+      <button class="preset-btn" data-work="40" data-rest="20" data-rounds="6">Beginner · 40/20 ×6</button>
+    </div>
+
+    <div class="interval-form">
+      <div class="field">
+        <label for="workMinInput">Work length</label>
+        <div class="duration-inputs">
+          <span class="dur-pair"><input type="number" id="workMinInput" min="0" max="60" value="0" aria-label="Work minutes"><span class="duration-unit">min</span></span>
+          <span class="dur-pair"><input type="number" id="workSecInput" min="0" max="59" value="45" aria-label="Work seconds"><span class="duration-unit">sec</span></span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="restMinInput">Rest length</label>
+        <div class="duration-inputs">
+          <span class="dur-pair"><input type="number" id="restMinInput" min="0" max="60" value="0" aria-label="Rest minutes"><span class="duration-unit">min</span></span>
+          <span class="dur-pair"><input type="number" id="restSecInput" min="0" max="59" value="10" aria-label="Rest seconds"><span class="duration-unit">sec</span></span>
+        </div>
+      </div>
+      <div class="field rounds-field">
+        <label for="roundsInput">Rounds</label>
+        <input type="number" id="roundsInput" min="1" max="99" value="8" aria-label="Number of rounds">
+      </div>
+      <label class="endless-check"><input type="checkbox" id="endlessCheck"> Repeat endlessly</label>
+      <button class="btn-primary" id="applyIntervalBtn"><i class="fa-solid fa-check"></i> Apply</button>
+    </div>
+    <p class="duration-note">E.g. 45 sec work / 10 sec rest × 8 rounds — it keeps going on its own until every round is done.</p>
+    <p class="complete-banner" id="intervalCompleteBanner"><i class="fa-solid fa-circle-check"></i> All rounds complete — nice work!</p>
+  </section>
+
+  <!-- ================= MEETING FINDER ================= -->
+  <section class="page" id="page-meeting">
+    <div class="page-head">
+      <div class="eyebrow">Real Problem: Scheduling Across Zones</div>
+      <h2>Find a time that works for both.</h2>
+      <p>Pick two cities, see the overlap in working hours (9 AM–6 PM local), instantly.</p>
+    </div>
+
+    <div class="meeting-form">
+      <div class="field" style="min-width:150px;">
+        <label for="meetCountryA">Country A</label>
+        <select id="meetCountryA"></select>
+      </div>
+      <div class="field" style="min-width:150px;">
+        <label for="meetCityA">City A</label>
+        <select id="meetCityA"></select>
+      </div>
+      <div class="field" style="min-width:150px;">
+        <label for="meetCountryB">Country B</label>
+        <select id="meetCountryB"></select>
+      </div>
+      <div class="field" style="min-width:150px;">
+        <label for="meetCityB">City B</label>
+        <select id="meetCityB"></select>
+      </div>
+      <button class="btn-primary" id="findOverlapBtn"><i class="fa-solid fa-magnifying-glass"></i> Find overlap</button>
+    </div>
+
+    <div class="meeting-result" id="meetingResult"></div>
+  </section>
+
+  <!-- ================= ALARMS ================= -->
+  <section class="page" id="page-alarms">
+    <div class="page-head">
+      <div class="eyebrow">Real Problem: Waking Up On Time</div>
+      <h2>Set your alarms</h2>
+      <p>Stacked right into the studio — saved for next time you visit.</p>
+    </div>
+
+    <form class="alarm-form" id="alarmForm">
+      <div class="field">
+        <label for="alarmTime">Time</label>
+        <input type="time" id="alarmTime" required>
+      </div>
+      <div class="field">
+        <label for="alarmLabel">Label</label>
+        <input type="text" id="alarmLabel" placeholder="e.g. Morning run">
+      </div>
+      <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Add alarm</button>
+    </form>
+
+    <div class="alarm-list" id="alarmList"></div>
+  </section>
+
+  <!-- ================= ABOUT ================= -->
+  <section class="page" id="page-about">
+    <div class="page-head">
+      <h2>About Meridian</h2>
+    </div>
+    <div class="about-wrap">
+      <p>Meridian started as a clock studio and grew into a small toolkit for the actual problems people run into around time: knowing what time it is somewhere else, staying focused, finding a meeting slot that works for two cities, and waking up on time.</p>
+      <p>Every clock, timer, and grid on this site runs on your device's real clock — nothing simulated. Your world clock cities, focus history, alarms, and preferences are saved to this browser, so they're still here next time you open the site.</p>
+      <h4>Built with</h4>
+      <div class="stack-list">
+        <span class="stack-chip">Semantic HTML</span>
+        <span class="stack-chip">Custom CSS tokens</span>
+        <span class="stack-chip">Vanilla JavaScript</span>
+        <span class="stack-chip">Hash-routed SPA</span>
+        <span class="stack-chip">Intl.DateTimeFormat</span>
+        <span class="stack-chip">Web Audio API</span>
+        <span class="stack-chip">window.storage persistence</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="ring-overlay" id="ringOverlay">
+  <i class="fa-solid fa-bell"></i>
+  <h3 id="ringLabel">Alarm</h3>
+  <div class="time-big" id="ringTime">00:00</div>
+  <div class="ring-actions">
+    <button class="btn-ghost" id="snoozeBtn">Snooze 5m</button>
+    <button class="btn-primary" id="dismissBtn">Dismiss</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- ROUTING ---------------- */
+  const routes = ["home","world","focus","intervals","meeting","alarms","about"];
+  function showRoute(){
+    let hash = location.hash.replace("#/","") || "home";
+    if(!routes.includes(hash)) hash = "home";
+    routes.forEach(r=>{ document.getElementById("page-"+r).classList.toggle("active", r===hash); });
+    document.querySelectorAll(".navlinks a").forEach(a=>{ a.classList.toggle("active", a.dataset.route===hash); });
+    document.getElementById("navLinks").classList.remove("open");
+  }
+  window.addEventListener("hashchange", showRoute);
+  if(!location.hash) location.hash = "#/home";
+  showRoute();
+  document.getElementById("navToggle").addEventListener("click", ()=>{
+    document.getElementById("navLinks").classList.toggle("open");
+  });
+
+  /* ---------------- STORAGE HELPERS ----------------
+     Tries window.storage first (works inside Claude.ai's preview).
+     Falls back to localStorage automatically (works once deployed
+     to a real browser, e.g. GitHub Pages) so saved data works for
+     every visitor, not just inside this chat. */
+  const LS_PREFIX = "meridian:";
+  function hasClaudeStorage(){
+    return typeof window.storage !== "undefined"
+      && window.storage
+      && typeof window.storage.set === "function"
+      && typeof window.storage.get === "function";
+  }
+  async function saveData(key, value){
+    if(hasClaudeStorage()){
+      try{
+        const r = await window.storage.set(key, JSON.stringify(value), false);
+        if(r) return;
+      }catch(e){ /* fall through to localStorage */ }
+    }
+    try{ localStorage.setItem(LS_PREFIX+key, JSON.stringify(value)); }
+    catch(e){ console.error("no storage available for", key, e); }
+  }
+  async function loadData(key, fallback){
+    if(hasClaudeStorage()){
+      try{
+        const res = await window.storage.get(key, false);
+        if(res) return JSON.parse(res.value);
+      }catch(e){ /* fall through to localStorage */ }
+    }
+    try{
+      const raw = localStorage.getItem(LS_PREFIX+key);
+      if(raw !== null) return JSON.parse(raw);
+    }catch(e){ /* ignore */ }
+    return fallback;
+  }
+
+  /* ---------------- STATE ---------------- */
+  let use24h = true;
+  let accent = "#b08d57";
+
+  (async function loadSettings(){
+    const s = await loadData("settings", { accent:"#b08d57", use24h:true });
+    accent = s.accent; use24h = s.use24h;
+    document.documentElement.style.setProperty("--accent", accent);
+    document.querySelectorAll(".swatch").forEach(sw=>{
+      sw.classList.toggle("active", sw.dataset.color === accent);
+    });
+    document.querySelectorAll(".fmt-btn[data-fmt]").forEach(b=>{
+      b.classList.toggle("active", (b.dataset.fmt==="24") === use24h);
+    });
+  })();
+
+  /* ---------------- STUDIO TABS ---------------- */
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  tabBtns.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      tabBtns.forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      document.querySelectorAll(".clock-card").forEach(c=>c.classList.remove("active"));
+      document.getElementById("card-"+btn.dataset.style).classList.add("active");
+    });
+  });
+
+  document.querySelectorAll(".swatch").forEach(sw=>{
+    sw.addEventListener("click", ()=>{
+      document.querySelectorAll(".swatch").forEach(s=>s.classList.remove("active"));
+      sw.classList.add("active");
+      accent = sw.dataset.color;
+      document.documentElement.style.setProperty("--accent", accent);
+      saveData("settings", { accent, use24h });
+    });
+  });
+  document.querySelectorAll(".fmt-btn[data-fmt]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      document.querySelectorAll(".fmt-btn[data-fmt]").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      use24h = btn.dataset.fmt === "24";
+      saveData("settings", { accent, use24h });
+    });
+  });
+
+  /* ---------------- 7-SEGMENT ---------------- */
+  const SEG_MAP = { "0":"abcdef","1":"bc","2":"abged","3":"abgcd","4":"fgbc","5":"afgcd","6":"afgecd","7":"abc","8":"abcdefg","9":"abcdfg" };
+  const digitalRow = document.getElementById("digitalRow");
+  function makeDigit(){
+    const d = document.createElement("div"); d.className = "digit";
+    "abcdefg".split("").forEach(seg=>{ const s=document.createElement("div"); s.className="seg seg-"+seg; s.dataset.seg=seg; d.appendChild(s); });
+    return d;
+  }
+  const digitEls = [];
+  ["h1","h2","colon","m1","m2"].forEach(kind=>{
+    if(kind==="colon"){ const c=document.createElement("div"); c.className="colon"; c.textContent=":"; digitalRow.appendChild(c); }
+    else { const d=makeDigit(); digitalRow.appendChild(d); digitEls.push(d); }
+  });
+  function setDigit(el, num){
+    const segs = SEG_MAP[String(num)] || "";
+    el.querySelectorAll(".seg").forEach(s=> s.classList.toggle("on", segs.includes(s.dataset.seg)));
+  }
+
+  /* ---------------- ROMAN FACE ---------------- */
+  const romanFace = document.getElementById("romanFace");
+  const numerals = ["XII","I","II","III","IV","V","VI","VII","VIII","IX","X","XI"];
+  numerals.forEach((n,i)=>{
+    const angle = (i/12) * 2 * Math.PI - Math.PI/2;
+    const r = 104, x = 125 + r*Math.cos(angle), y = 125 + r*Math.sin(angle);
+    const el = document.createElement("div"); el.className="rn"; el.textContent=n;
+    el.style.left=x+"px"; el.style.top=y+"px"; romanFace.appendChild(el);
+  });
+
+  const WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const WEEKDAYS_SHORT = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+  const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+  /* ---------------- COUNTRY → CITY DATA (shared by World Clock + Meeting Finder) ----------------
+     Free-to-use tool: anyone can pick their own country first, then a city in it,
+     instead of hunting through one giant city list. */
+  const COUNTRY_CITY_TZ = {
+    "Pakistan": [ {name:"Karachi",tz:"Asia/Karachi"}, {name:"Lahore",tz:"Asia/Karachi"}, {name:"Islamabad",tz:"Asia/Karachi"}, {name:"Faisalabad",tz:"Asia/Karachi"} ],
+    "India": [ {name:"Mumbai",tz:"Asia/Kolkata"}, {name:"Delhi",tz:"Asia/Kolkata"}, {name:"Bengaluru",tz:"Asia/Kolkata"}, {name:"Kolkata",tz:"Asia/Kolkata"} ],
+    "United Arab Emirates": [ {name:"Dubai",tz:"Asia/Dubai"}, {name:"Abu Dhabi",tz:"Asia/Dubai"}, {name:"Sharjah",tz:"Asia/Dubai"} ],
+    "Saudi Arabia": [ {name:"Riyadh",tz:"Asia/Riyadh"}, {name:"Jeddah",tz:"Asia/Riyadh"} ],
+    "United States": [ {name:"New York",tz:"America/New_York"}, {name:"Los Angeles",tz:"America/Los_Angeles"}, {name:"Chicago",tz:"America/Chicago"}, {name:"Houston",tz:"America/Chicago"} ],
+    "Canada": [ {name:"Toronto",tz:"America/Toronto"}, {name:"Vancouver",tz:"America/Vancouver"} ],
+    "United Kingdom": [ {name:"London",tz:"Europe/London"}, {name:"Manchester",tz:"Europe/London"} ],
+    "Germany": [ {name:"Berlin",tz:"Europe/Berlin"}, {name:"Munich",tz:"Europe/Berlin"} ],
+    "France": [ {name:"Paris",tz:"Europe/Paris"} ],
+    "Turkey": [ {name:"Istanbul",tz:"Europe/Istanbul"} ],
+    "China": [ {name:"Beijing",tz:"Asia/Shanghai"}, {name:"Shanghai",tz:"Asia/Shanghai"} ],
+    "Japan": [ {name:"Tokyo",tz:"Asia/Tokyo"}, {name:"Osaka",tz:"Asia/Tokyo"} ],
+    "Singapore": [ {name:"Singapore",tz:"Asia/Singapore"} ],
+    "Australia": [ {name:"Sydney",tz:"Australia/Sydney"}, {name:"Melbourne",tz:"Australia/Melbourne"} ],
+    "New Zealand": [ {name:"Auckland",tz:"Pacific/Auckland"} ]
+  };
+  function tzFor(country, city){
+    const list = COUNTRY_CITY_TZ[country] || [];
+    const found = list.find(c=>c.name===city);
+    return found ? found.tz : "UTC";
+  }
+  function entryKey(entry){ return entry.country+"|"+entry.city; }
+  function cssId(entry){ return (entry.country+entry.city).replace(/[^a-zA-Z0-9]/g,''); }
+  function cityNow(tz){
+    try{ return new Date(new Date().toLocaleString('en-US', { timeZone: tz })); }
+    catch(e){ return new Date(); }
+  }
+  function cityOffsetLabel(tz){
+    try{
+      const parts = new Intl.DateTimeFormat('en-US',{ timeZone:tz, timeZoneName:'shortOffset' }).formatToParts(new Date());
+      const tzPart = parts.find(p=>p.type==='timeZoneName');
+      return tzPart ? tzPart.value : "";
+    }catch(e){ return ""; }
+  }
+
+  // Populate every country select, then wire each one to refresh its paired city select
+  const COUNTRY_NAMES = Object.keys(COUNTRY_CITY_TZ);
+  function fillCitySelect(citySel, country){
+    citySel.innerHTML = "";
+    (COUNTRY_CITY_TZ[country] || []).forEach(c=>{
+      const o = document.createElement("option"); o.value=c.name; o.textContent=c.name; citySel.appendChild(o);
+    });
+  }
+  function wireCountryCityPair(countrySel, citySel, defaultCountry, defaultCity){
+    COUNTRY_NAMES.forEach(name=>{
+      const o = document.createElement("option"); o.value=name; o.textContent=name; countrySel.appendChild(o);
+    });
+    countrySel.value = defaultCountry;
+    fillCitySelect(citySel, defaultCountry);
+    if(defaultCity) citySel.value = defaultCity;
+    countrySel.addEventListener("change", ()=> fillCitySelect(citySel, countrySel.value));
+  }
+
+  const countrySelect = document.getElementById("countrySelect");
+  const citySelect = document.getElementById("citySelect");
+  const meetCountryA = document.getElementById("meetCountryA");
+  const meetCityA = document.getElementById("meetCityA");
+  const meetCountryB = document.getElementById("meetCountryB");
+  const meetCityB = document.getElementById("meetCityB");
+
+  wireCountryCityPair(countrySelect, citySelect, "Pakistan", "Karachi");
+  wireCountryCityPair(meetCountryA, meetCityA, "Pakistan", "Karachi");
+  wireCountryCityPair(meetCountryB, meetCityB, "United Kingdom", "London");
+
+  /* ---------------- WORLD CLOCK ---------------- */
+  let worldCities = []; // array of {country, city}
+  const worldGrid = document.getElementById("worldGrid");
+
+  function renderWorldGrid(){
+    worldGrid.innerHTML = "";
+    if(worldCities.length===0){
+      worldGrid.innerHTML = `<div class="empty-state">No cities added yet — pick a country and city above to get started.</div>`;
+      return;
+    }
+    worldCities.forEach(entry=>{
+      const card = document.createElement("div");
+      card.className = "city-card";
+      card.innerHTML = `
+        <button class="remove" data-key="${entryKey(entry)}" aria-label="Remove ${entry.city}"><i class="fa-solid fa-xmark"></i></button>
+        <div class="city-name">${entry.city}</div>
+        <div class="city-meta">${entry.country}</div>
+        <div class="city-time" id="time-${cssId(entry)}">--:--</div>
+        <div class="city-meta" id="meta-${cssId(entry)}"></div>
+        <span class="badge-off">${cityOffsetLabel(tzFor(entry.country, entry.city))}</span>
+      `;
+      worldGrid.appendChild(card);
+    });
+    worldGrid.querySelectorAll(".remove").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        worldCities = worldCities.filter(e=>entryKey(e)!==btn.dataset.key);
+        saveData("worldcities", worldCities);
+        renderWorldGrid();
+      });
+    });
+    updateWorldTimes();
+  }
+
+  function updateWorldTimes(){
+    worldCities.forEach(entry=>{
+      const d = cityNow(tzFor(entry.country, entry.city));
+      const h = d.getHours(), m = d.getMinutes();
+      const disp = use24h ? String(h).padStart(2,"0") : String(h%12===0?12:h%12).padStart(2,"0");
+      const el = document.getElementById("time-"+cssId(entry));
+      if(el) el.textContent = `${disp}:${String(m).padStart(2,"0")}${use24h?"":(h<12?" AM":" PM")}`;
+      const meta = document.getElementById("meta-"+cssId(entry));
+      if(meta) meta.textContent = `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    });
+  }
+
+  document.getElementById("addCityBtn").addEventListener("click", ()=>{
+    const entry = { country: countrySelect.value, city: citySelect.value };
+    if(!worldCities.some(e=>entryKey(e)===entryKey(entry))){
+      worldCities.push(entry);
+      saveData("worldcities", worldCities);
+      renderWorldGrid();
+    }
+  });
+
+  /* ---------------- MEETING FINDER ---------------- */
+  const meetingResult = document.getElementById("meetingResult");
+  function buildOverlap(){
+    const cityA = meetCityA.value, cityB = meetCityB.value;
+    const nowA = cityNow(tzFor(meetCountryA.value, cityA));
+    const nowB = cityNow(tzFor(meetCountryB.value, cityB));
+    let diff = nowB.getHours() - nowA.getHours();
+    if(diff > 12) diff -= 24; if(diff < -12) diff += 24;
+
+    let rowA = "", rowB = "", overlapHours = [];
+    for(let h=0; h<24; h++){
+      const hB = ((h + diff) % 24 + 24) % 24;
+      const workA = h>=9 && h<18;
+      const workB = hB>=9 && hB<18;
+      const overlap = workA && workB;
+      if(overlap) overlapHours.push(h);
+      rowA += `<div class="hour-block ${workA?'work':''} ${overlap?'overlap':''}" data-tip="${h}:00 ${cityA}"></div>`;
+      rowB += `<div class="hour-block ${workB?'work':''} ${overlap?'overlap':''}" data-tip="${hB}:00 ${cityB}"></div>`;
+    }
+
+    let bestText = "No working-hours overlap — try an early/late call on either side.";
+    if(overlapHours.length){
+      const start = overlapHours[0], end = overlapHours[overlapHours.length-1]+1;
+      bestText = `Best overlap: <b>${String(start).padStart(2,"0")}:00–${String(end).padStart(2,"0")}:00 (${cityA} time)</b>`;
+    }
+
+    meetingResult.innerHTML = `
+      <div class="zone-row"><div class="zone-label">${cityA}</div><div class="hour-grid">${rowA}</div></div>
+      <div class="zone-row"><div class="zone-label">${cityB}</div><div class="hour-grid">${rowB}</div></div>
+      <div class="legend">
+        <span><i style="background:var(--ink-3)"></i> Off hours</span>
+        <span><i style="background:rgba(176,141,87,.35)"></i> Working hours (9–6)</span>
+        <span><i style="background:var(--good)"></i> Overlap for both</span>
+      </div>
+      <div class="best-overlap">${bestText}</div>
+    `;
+  }
+  document.getElementById("findOverlapBtn").addEventListener("click", buildOverlap);
+
+  /* ---------------- ALARM STATE (declared early — tick() below needs these) ---------------- */
+  let alarms = [];
+  let alarmSeq = 0;
+  let firedThisMinuteFor = null;
+
+  /* ---------------- MAIN TICK (studio + world clock) ---------------- */
+  function tick(){
+    const now = new Date();
+    const h24 = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    const day = now.getDate(), wd = now.getDay(), mo = now.getMonth();
+    let hDisplay = use24h ? h24 : (h24 % 12 === 0 ? 12 : h24 % 12);
+    const hStr = String(hDisplay).padStart(2,"0"), mStr = String(m).padStart(2,"0");
+
+    const hourDeg = (h24 % 12) * 30 + m * 0.5;
+    const minDeg = m * 6 + s * 0.1;
+    const secDeg = s * 6;
+    document.getElementById("hybridHour").style.transform = `rotate(${hourDeg}deg)`;
+    document.getElementById("hybridMin").style.transform = `rotate(${minDeg}deg)`;
+    document.getElementById("hybridSec").style.transform = `rotate(${secDeg}deg)`;
+    document.getElementById("hybridDigits").innerHTML = `${hStr}<small>:${mStr}</small>`;
+    document.getElementById("hybridDay").textContent = WEEKDAYS[wd].toUpperCase();
+
+    const digStr = hStr + mStr;
+    digitEls.forEach((el,i)=> setDigit(el, digStr[i]));
+    document.getElementById("digitalDate").textContent = `${day}, ${MONTHS[mo]}`;
+    document.getElementById("digitalPill").textContent = WEEKDAYS_SHORT[wd];
+
+    document.getElementById("romanHour").style.transform = `rotate(${hourDeg}deg)`;
+    document.getElementById("romanMin").style.transform = `rotate(${minDeg}deg)`;
+    document.getElementById("romanSec").style.transform = `rotate(${secDeg}deg)`;
+    document.getElementById("romanLabel").textContent = `${WEEKDAYS[wd]} · ${day} ${MONTHS[mo][0]}${MONTHS[mo].slice(1).toLowerCase()}`;
+
+    updateWorldTimes();
+    checkAlarms(h24, m, s);
+  }
+  setInterval(tick, 1000);
+  tick();
+
+  /* ---------------- ALARMS ---------------- */
+  const alarmForm = document.getElementById("alarmForm");
+  const alarmList = document.getElementById("alarmList");
+
+  function renderAlarms(){
+    alarmList.innerHTML = "";
+    if(alarms.length === 0){ alarmList.innerHTML = `<div class="empty-state">No alarms yet — add one above.</div>`; return; }
+    alarms.slice().sort((a,b)=>a.time.localeCompare(b.time)).forEach(a=>{
+      const item = document.createElement("div"); item.className = "alarm-item";
+      item.innerHTML = `
+        <div><div class="time">${a.time}</div><div class="label">${a.label || "Alarm"}</div></div>
+        <div class="alarm-actions">
+          <label class="switch"><input type="checkbox" ${a.enabled?"checked":""} data-id="${a.id}" class="alarm-toggle"><span class="slider-el"></span></label>
+          <button class="del-btn" data-id="${a.id}" aria-label="Delete alarm"><i class="fa-solid fa-trash"></i></button>
+        </div>`;
+      alarmList.appendChild(item);
+    });
+    alarmList.querySelectorAll(".alarm-toggle").forEach(cb=>{
+      cb.addEventListener("change", ()=>{ const a=alarms.find(x=>x.id==cb.dataset.id); if(a){a.enabled=cb.checked; saveData("alarms", alarms);} });
+    });
+    alarmList.querySelectorAll(".del-btn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{ alarms = alarms.filter(x=>x.id != btn.dataset.id); saveData("alarms", alarms); renderAlarms(); });
+    });
+  }
+  alarmForm.addEventListener("submit", (e)=>{
+    e.preventDefault();
+    const time = document.getElementById("alarmTime").value;
+    const label = document.getElementById("alarmLabel").value.trim();
+    if(!time) return;
+    alarms.push({ id: ++alarmSeq, time, label, enabled:true });
+    saveData("alarms", alarms);
+    alarmForm.reset(); renderAlarms();
+  });
+  function checkAlarms(h,m,s){
+    if(s !== 0){ firedThisMinuteFor = null; return; }
+    const hhmm = String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+    if(firedThisMinuteFor === hhmm) return;
+    const match = alarms.find(a=>a.enabled && a.time === hhmm);
+    if(match){ firedThisMinuteFor = hhmm; ringAlarm(match); }
+  }
+
+  const ringOverlay = document.getElementById("ringOverlay");
+  let beepInterval = null, audioCtx = null;
+  function beep(){
+    try{
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = "sine"; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+    }catch(e){}
+  }
+  function ringAlarm(alarm){
+    document.getElementById("ringLabel").textContent = alarm.label || "Alarm";
+    document.getElementById("ringTime").textContent = alarm.time;
+    ringOverlay.classList.add("show"); beep();
+    beepInterval = setInterval(beep, 900);
+  }
+  function stopRinging(){ ringOverlay.classList.remove("show"); clearInterval(beepInterval); }
+  document.getElementById("dismissBtn").addEventListener("click", stopRinging);
+  document.getElementById("snoozeBtn").addEventListener("click", stopRinging);
+
+  /* ---------------- FOCUS TIMER ---------------- */
+  let FOCUS_SECONDS = 25*60, BREAK_SECONDS = 5*60;
+  let timerMode = "focus";
+  let remaining = FOCUS_SECONDS;
+  let timerRunning = false;
+  let timerInterval = null;
+  let history = [];
+  let sessionsToday = 0;
+
+  const ringFg = document.getElementById("ringFg");
+  const CIRC = 2 * Math.PI * 106;
+  ringFg.setAttribute("stroke-dasharray", CIRC);
+
+  const focusMinInput = document.getElementById("focusMinInput");
+  const focusSecInput = document.getElementById("focusSecInput");
+  const breakMinInput = document.getElementById("breakMinInput");
+  const breakSecInput = document.getElementById("breakSecInput");
+
+  function fmtLen(totalSec){
+    const m = Math.floor(totalSec/60), s = totalSec%60;
+    return s ? `${m}m ${s}s` : `${m}m`;
+  }
+  function updateModeLabels(){
+    document.getElementById("modeFocusBtn").textContent = "Focus " + fmtLen(FOCUS_SECONDS);
+    document.getElementById("modeBreakBtn").textContent = "Break " + fmtLen(BREAK_SECONDS);
+  }
+
+  function renderTimer(){
+    const mins = Math.floor(remaining/60), secs = remaining%60;
+    document.getElementById("timerDisplay").textContent = `${String(mins).padStart(2,"0")}:${String(secs).padStart(2,"0")}`;
+    document.getElementById("timerModeLabel").textContent = timerMode === "focus" ? "Focus" : "Break";
+    const total = timerMode === "focus" ? FOCUS_SECONDS : BREAK_SECONDS;
+    const progress = total > 0 ? 1 - remaining/total : 0;
+    ringFg.setAttribute("stroke-dashoffset", CIRC * (1-progress));
+  }
+  function setMode(mode){
+    timerMode = mode; timerRunning = false; clearInterval(timerInterval);
+    remaining = mode === "focus" ? FOCUS_SECONDS : BREAK_SECONDS;
+    document.getElementById("modeFocusBtn").classList.toggle("active", mode==="focus");
+    document.getElementById("modeBreakBtn").classList.toggle("active", mode==="break");
+    document.getElementById("startPauseBtn").innerHTML = '<i class="fa-solid fa-play"></i> Start';
+    renderTimer();
+  }
+  document.getElementById("modeFocusBtn").addEventListener("click", ()=>setMode("focus"));
+  document.getElementById("modeBreakBtn").addEventListener("click", ()=>setMode("break"));
+
+  document.getElementById("applyDurationBtn").addEventListener("click", ()=>{
+    const fMin = Math.max(0, Math.min(180, parseInt(focusMinInput.value,10) || 0));
+    const fSec = Math.max(0, Math.min(59, parseInt(focusSecInput.value,10) || 0));
+    const bMin = Math.max(0, Math.min(60, parseInt(breakMinInput.value,10) || 0));
+    const bSec = Math.max(0, Math.min(59, parseInt(breakSecInput.value,10) || 0));
+    let newFocus = fMin*60 + fSec;
+    let newBreak = bMin*60 + bSec;
+    if(newFocus < 5) newFocus = 5;   // guard against a 0-second timer
+    if(newBreak < 5) newBreak = 5;
+    FOCUS_SECONDS = newFocus; BREAK_SECONDS = newBreak;
+    focusMinInput.value = Math.floor(newFocus/60); focusSecInput.value = newFocus%60;
+    breakMinInput.value = Math.floor(newBreak/60); breakSecInput.value = newBreak%60;
+    updateModeLabels();
+    saveData("timer-durations", { focus: FOCUS_SECONDS, brk: BREAK_SECONDS });
+    setMode(timerMode); // resets the ring + remaining to the new duration
+  });
+
+  function startPause(){
+    if(timerRunning){
+      timerRunning = false; clearInterval(timerInterval);
+      document.getElementById("startPauseBtn").innerHTML = '<i class="fa-solid fa-play"></i> Start';
+    } else {
+      timerRunning = true;
+      document.getElementById("startPauseBtn").innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+      timerInterval = setInterval(()=>{
+        remaining--;
+        if(remaining <= 0){
+          clearInterval(timerInterval); timerRunning = false;
+          beep();
+          if(timerMode === "focus"){
+            sessionsToday++;
+            history.unshift({ date: new Date().toLocaleDateString(), minutes: Math.round((FOCUS_SECONDS/60)*10)/10 });
+            history = history.slice(0,30);
+            saveData("focus-history", history);
+            renderHistory(); renderSessionCount();
+          }
+          setMode(timerMode === "focus" ? "break" : "focus");
+          return;
+        }
+        renderTimer();
+      }, 1000);
+    }
+  }
+  document.getElementById("startPauseBtn").addEventListener("click", startPause);
+  document.getElementById("resetBtn").addEventListener("click", ()=> setMode(timerMode));
+
+
+  function renderHistory(){
+    const list = document.getElementById("historyList");
+    list.innerHTML = "";
+    if(history.length === 0){ list.innerHTML = `<div class="empty-state">No sessions logged yet — start a focus timer above.</div>`; return; }
+    history.forEach(h=>{
+      const item = document.createElement("div"); item.className = "history-item";
+      item.innerHTML = `<span>${h.date}</span><span class="mins">${h.minutes} min</span>`;
+      list.appendChild(item);
+    });
+  }
+  function renderSessionCount(){
+    document.getElementById("sessionCount").textContent = `${sessionsToday} focus session${sessionsToday===1?"":"s"} logged this visit · ${history.length} total saved`;
+  }
+
+  /* ---------------- INTERVAL TIMER (work/rest rounds that auto-repeat) ---------------- */
+  let WORK_SECONDS = 45, REST_SECONDS = 10, TOTAL_ROUNDS = 8, ENDLESS = false;
+  let ivPhase = "work";
+  let ivRemaining = WORK_SECONDS;
+  let ivRound = 1;
+  let ivRunning = false;
+  let ivInterval = null;
+  let ivDone = false;
+
+  const ivRingFg = document.getElementById("intervalRingFg");
+  const IV_CIRC = 2 * Math.PI * 106;
+  ivRingFg.setAttribute("stroke-dasharray", IV_CIRC);
+
+  const workMinInput = document.getElementById("workMinInput");
+  const workSecInput = document.getElementById("workSecInput");
+  const restMinInput = document.getElementById("restMinInput");
+  const restSecInput = document.getElementById("restSecInput");
+  const roundsInput = document.getElementById("roundsInput");
+  const endlessCheck = document.getElementById("endlessCheck");
+
+  function renderInterval(){
+    const m = Math.floor(ivRemaining/60), s = ivRemaining%60;
+    document.getElementById("intervalDisplay").textContent = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    const tag = document.getElementById("intervalPhaseTag");
+    tag.textContent = ivPhase === "work" ? "WORK" : "REST";
+    tag.className = "phase-tag " + ivPhase;
+    document.getElementById("intervalRoundLabel").textContent = ENDLESS
+      ? `Round ${ivRound} · endless`
+      : `Round ${ivRound} of ${TOTAL_ROUNDS}`;
+    const total = ivPhase === "work" ? WORK_SECONDS : REST_SECONDS;
+    const progress = total > 0 ? 1 - ivRemaining/total : 0;
+    ivRingFg.setAttribute("stroke-dashoffset", IV_CIRC * (1-progress));
+  }
+
+  function resetIntervalState(){
+    ivRunning = false; clearInterval(ivInterval);
+    ivPhase = "work"; ivRound = 1; ivRemaining = WORK_SECONDS; ivDone = false;
+    document.getElementById("intervalStartPauseBtn").innerHTML = '<i class="fa-solid fa-play"></i> Start';
+    document.getElementById("intervalStatus").textContent = "Ready to start.";
+    document.getElementById("intervalCompleteBanner").classList.remove("show");
+    renderInterval();
+  }
+
+  document.getElementById("applyIntervalBtn").addEventListener("click", ()=>{
+    const wMin = Math.max(0, Math.min(60, parseInt(workMinInput.value,10) || 0));
+    const wSec = Math.max(0, Math.min(59, parseInt(workSecInput.value,10) || 0));
+    const rMin = Math.max(0, Math.min(60, parseInt(restMinInput.value,10) || 0));
+    const rSec = Math.max(0, Math.min(59, parseInt(restSecInput.value,10) || 0));
+    let newWork = wMin*60 + wSec;
+    let newRest = rMin*60 + rSec;
+    if(newWork < 3) newWork = 3; // guard against a 0-second phase
+    WORK_SECONDS = newWork; REST_SECONDS = newRest;
+    TOTAL_ROUNDS = Math.max(1, Math.min(99, parseInt(roundsInput.value,10) || 1));
+    ENDLESS = endlessCheck.checked;
+    workMinInput.value = Math.floor(newWork/60); workSecInput.value = newWork%60;
+    restMinInput.value = Math.floor(newRest/60); restSecInput.value = newRest%60;
+    roundsInput.value = TOTAL_ROUNDS;
+    saveData("interval-settings", { work: WORK_SECONDS, rest: REST_SECONDS, rounds: TOTAL_ROUNDS, endless: ENDLESS });
+    resetIntervalState();
+  });
+
+  function startPauseInterval(){
+    if(ivDone) return; // already finished — must Reset first
+    if(ivRunning){
+      ivRunning = false; clearInterval(ivInterval);
+      document.getElementById("intervalStartPauseBtn").innerHTML = '<i class="fa-solid fa-play"></i> Start';
+      document.getElementById("intervalStatus").textContent = "Paused.";
+    } else {
+      ivRunning = true;
+      document.getElementById("intervalStartPauseBtn").innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+      document.getElementById("intervalStatus").textContent = ivPhase === "work" ? "Go!" : "Rest up.";
+      ivInterval = setInterval(()=>{
+        ivRemaining--;
+        if(ivRemaining <= 0){
+          beep();
+          if(ivPhase === "work"){
+            if(REST_SECONDS > 0){
+              ivPhase = "rest"; ivRemaining = REST_SECONDS;
+              document.getElementById("intervalStatus").textContent = "Rest up.";
+            } else {
+              // no rest phase configured — go straight to next round
+              advanceRound();
+              return;
+            }
+          } else {
+            advanceRound();
+            return;
+          }
+          renderInterval();
+          return;
+        }
+        renderInterval();
+      }, 1000);
+    }
+  }
+
+  function advanceRound(){
+    if(!ENDLESS && ivRound >= TOTAL_ROUNDS){
+      // workout complete
+      clearInterval(ivInterval); ivRunning = false; ivDone = true;
+      beep(); setTimeout(beep, 350); setTimeout(beep, 700); // triple beep = finished
+      document.getElementById("intervalStartPauseBtn").innerHTML = '<i class="fa-solid fa-play"></i> Start';
+      document.getElementById("intervalStatus").textContent = "All rounds complete!";
+      document.getElementById("intervalCompleteBanner").classList.add("show");
+      renderInterval();
+      return;
+    }
+    ivRound++;
+    ivPhase = "work"; ivRemaining = WORK_SECONDS;
+    document.getElementById("intervalStatus").textContent = "Go!";
+    renderInterval();
+  }
+
+  document.getElementById("intervalStartPauseBtn").addEventListener("click", startPauseInterval);
+  document.getElementById("intervalResetBtn").addEventListener("click", resetIntervalState);
+
+  document.querySelectorAll(".preset-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      document.querySelectorAll(".preset-btn").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      const w = parseInt(btn.dataset.work,10), r = parseInt(btn.dataset.rest,10), rounds = parseInt(btn.dataset.rounds,10);
+      workMinInput.value = 0; workSecInput.value = w;
+      restMinInput.value = 0; restSecInput.value = r;
+      roundsInput.value = rounds;
+      endlessCheck.checked = false;
+      document.getElementById("applyIntervalBtn").click();
+    });
+  });
+
+  /* ---------------- INITIAL LOAD ---------------- */
+  (async function init(){
+    worldCities = await loadData("worldcities", [
+      { country:"Pakistan", city:"Karachi" },
+      { country:"United Kingdom", city:"London" },
+      { country:"United States", city:"New York" }
+    ]);
+    // guard against any stale/old-format saved data
+    worldCities = worldCities.filter(e => e && typeof e === "object" && e.country && e.city);
+    renderWorldGrid();
+
+    alarms = await loadData("alarms", []);
+    alarmSeq = alarms.reduce((m,a)=>Math.max(m,a.id||0), 0);
+    renderAlarms();
+
+    history = await loadData("focus-history", []);
+    renderHistory(); renderSessionCount();
+
+    const durations = await loadData("timer-durations", { focus: FOCUS_SECONDS, brk: BREAK_SECONDS });
+    FOCUS_SECONDS = durations.focus || FOCUS_SECONDS;
+    BREAK_SECONDS = durations.brk || BREAK_SECONDS;
+    focusMinInput.value = Math.floor(FOCUS_SECONDS/60); focusSecInput.value = FOCUS_SECONDS%60;
+    breakMinInput.value = Math.floor(BREAK_SECONDS/60); breakSecInput.value = BREAK_SECONDS%60;
+    updateModeLabels();
+    remaining = FOCUS_SECONDS;
+    renderTimer();
+
+    buildOverlap();
+  })();
+
+})();
+</script>
+</body>
+</html>
